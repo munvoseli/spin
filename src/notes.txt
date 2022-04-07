@@ -1,0 +1,12 @@
+#[tokio::main]
+fn main() -> Result<()> {
+...
+Ok()
+}
+
+fn main() {
+let mut rt = t::r::Runtime::new().uw();
+rt.block_on(async {
+...
+}
+}
