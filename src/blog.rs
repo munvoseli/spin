@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use crate::wirt;
 
 fn parse_write(outfile: &mut File, buf: &[u8]) {
-	println!("writing paragraph {}", buf.len());
+//	println!("writing paragraph {}", buf.len());
 	if buf.len() > 2 && buf[0..3] == [0x6d, 0x74, 0x0a] {
 		crate::math::write_svg(outfile, &buf[3..]);
 	} else if buf.len() > 2 && buf[0..3] == [0x6c, 0x6e, 0x0a] {
@@ -18,6 +18,19 @@ fn parse_write(outfile: &mut File, buf: &[u8]) {
 			outfile.write(&buf[3..j]).unwrap();
 		}
 		outfile.write(b"</a></p>").unwrap();
+	} else if buf.len() > 2 && buf[0..3] == [0x69, 0x6d, 0x0a] {
+		outfile.write(b"<img src=\"").unwrap();
+		let mut j = 3;
+		while j < buf.len() && buf[j] >= 0x20 { j += 1; }
+		outfile.write(&buf[3..j]).unwrap();
+		if j != buf.len() {
+			j += 1;
+			outfile.write(b"\" alt=\"").unwrap();
+			outfile.write(&buf[j..]).unwrap();
+			outfile.write(b"\" title=\"").unwrap();
+			outfile.write(&buf[j..]).unwrap();
+		}
+		outfile.write(b"\"/>").unwrap();
 	} else {
 		outfile.write(b"<p>").unwrap();
 		// line loop
@@ -79,7 +92,7 @@ pub fn serve_blog(stream: std::net::TcpStream, slugb: &[u8]) {
 			if update_blog(&slug, slugb) {
 				wirt::serve_html(stream, &fname);
 			} else {
-				wirt::serve_html(stream, "index.html");
+				serve_edit(stream, slugb);
 			}
 		}
 	}
@@ -110,7 +123,7 @@ pub fn post(stream: std::net::TcpStream, slugb: &[u8], data: &[u8]) {
 		}
 		i += 1;
 	}
-	println!("{}", std::str::from_utf8(&nd).unwrap());
+//	println!("{}", std::str::from_utf8(&nd).unwrap());
 	let slug = std::str::from_utf8(slugb).unwrap();
 	let fname = format!("blogsrc/{}.txt", slug);
 	let mut outfile = File::create(&fname).unwrap();

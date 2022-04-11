@@ -68,7 +68,7 @@ fn get_conlen(v: &[u8], h: &[(usize, usize, usize, usize)]) -> usize {
 	0
 }
 
-fn handle_http(stream: &mut std::net::TcpStream) -> Httpboi {
+fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 	let mut data = [0 as u8; 50];
 	let mut v = Vec::<u8>::new();
 //	let mut headers = Vec::<(usize, usize, usize, usize)>::new();
@@ -76,15 +76,20 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Httpboi {
 	let mut icrlf: usize = 0;
 	let mut dcrlf = false;
 	let now = std::time::Instant::now();
+//	let mut i = 0;
 	loop {
 		match stream.read(&mut data) {
 		Ok(0) => {
+//			println!("secsz {} {}", now.elapsed().as_secs(), i);
+//			i += 1;
 			if now.elapsed().as_secs() > 10 {
-				println!("timed out");
-				break;
+				println!("timed out {}", now.elapsed().as_secs());
+				println!("peer ip: {}", stream.peer_addr().unwrap());
+				return None; // pizza with left beef
 			}
 		},
 		Ok(n) => {
+//			println!("secsn {}", now.elapsed().as_secs());
 			v.extend_from_slice(&data[0..n]);
 			if !dcrlf {
 				while icrlf < v.len() - 3 {
@@ -99,11 +104,11 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Httpboi {
 			}
 			if dcrlf {
 				if v.len() >= icrlf + 4 + conlen {
-					println!("buff: {}", v.len());
-					println!("head: {}", icrlf);
-					println!("cont: {}", conlen);
-					println!("head + cont + 4: {}", conlen + icrlf + 4);
-					println!("booi");
+//					println!("buff: {}", v.len());
+//					println!("head: {}", icrlf);
+//					println!("cont: {}", conlen);
+//					println!("head + cont + 4: {}", conlen + icrlf + 4);
+//					println!("booi");
 					break;
 				}
 			}
@@ -126,18 +131,24 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Httpboi {
 	} // j on space after path
 //	let method = &v[0..i];
 //	let path = &v[i+1..j];
-	Httpboi {
+	Some(Httpboi {
 		v: v,
 //		ihs: headers,
 		imd: (0, i),
 		ipt: (i+1, j),
 //		conlen: conlen,
 		icont: icrlf + 4
-	}
+	})
 }
 
 fn handle_client(mut stream: std::net::TcpStream) {
+	println!("connection from {}", stream.peer_addr().unwrap());
 	let hb = handle_http(&mut stream);
+	if hb.is_none() {
+		println!("couldn't handle connection");
+		return;
+	}
+	let hb = hb.unwrap();
 	let method = &hb.v[hb.imd.0..hb.imd.1];
 	let path = &hb.v[hb.ipt.0..hb.ipt.1];
 	let s = std::str::from_utf8(method).unwrap();
@@ -169,6 +180,10 @@ fn handle_client(mut stream: std::net::TcpStream) {
 		} else {
 			wirt::serve_html(stream, "index.html");
 		}
+	} else if path[0] == [0x73, 0x74, 0x79, 0x6c, 0x65, 0x2e, 0x63, 0x73, 0x73] {
+		wirt::serve_file(stream, "style.css", b"text/css");
+	} else if path[0] == b"favicon.ico" {
+		wirt::serve_file(stream, "favicon.ico", b"image/x-icon");
 	} else {
 		wirt::serve_html(stream, "index.html");
 	}
@@ -178,7 +193,7 @@ fn handle_client(mut stream: std::net::TcpStream) {
 }
 
 fn main() {
-	let listener = std::net::TcpListener::bind("127.0.0.1:8080").unwrap();
+	let listener = std::net::TcpListener::bind("127.0.0.1:2627").unwrap();
 	for stream in listener.incoming() {
 		println!("got new stream");
 		handle_client(stream.unwrap());

@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-pub fn serve_html(mut stream: std::net::TcpStream, fal: &str) {
+pub fn serve_file(mut stream: std::net::TcpStream, fal: &str, contype: &[u8]) {
 	let mut v = Vec::<u8>::new();
 	let mut file = File::open(fal).unwrap();
 	file.read_to_end(&mut v).unwrap();
@@ -9,15 +9,14 @@ pub fn serve_html(mut stream: std::net::TcpStream, fal: &str) {
 	let mut n = v.len();
 	loop {
 		if n == 0 { break; }
-		nv.push((n % 10) as u8);
+		nv.push(((n % 10) as u8) ^ 0x30);
 		n /= 10;
 	}
 	let mut i = nv.len();
-	match stream.write
-	(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ") {
-	Err(_) => { return; }
-	_ => {}
-	}
+	if stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: ").is_err()
+	|| stream.write(contype).is_err()
+	|| stream.write(b"\r\nContent-Length: ").is_err()
+	{ return; }
 	loop {
 		if i == 0 { break; }
 		i -= 1;
@@ -25,6 +24,9 @@ pub fn serve_html(mut stream: std::net::TcpStream, fal: &str) {
 	}
 	if stream.write(b"\r\n\r\n").is_err() { return; }
 	if stream.write(&v).is_err() { return; }
+}
+pub fn serve_html(stream: std::net::TcpStream, fal: &str) {
+	serve_file(stream, fal, b"text/html");
 }
 
 pub fn html_file(outfile: &mut File, f: &mut File) {
