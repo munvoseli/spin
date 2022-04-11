@@ -143,8 +143,14 @@ fn save_feed_html(items: &Vec<FeedItem>) {
 			if let Some(h) = &item.text { h }
 			else if let Some(h) = &item.href { h }
 			else { item.lookup.as_ref().unwrap() };
+		file.write(b"<br/>").unwrap();
+		if let Some(h) = item.date {
+			file.write(
+				format!("{} ", currdate - h).as_bytes()
+			).unwrap();
+		}
 		file.write(
-			format!("<br/>{} <a href=\"{}\">{}</a>", if let Some(h) = item.date { currdate - h } else { 0 }, url, text).as_bytes()
+			format!("<a href=\"{}\">{}</a>", url, text).as_bytes()
 		).unwrap();
 		file.write(b"\n").unwrap();
 	}
@@ -152,7 +158,7 @@ fn save_feed_html(items: &Vec<FeedItem>) {
 }
 
 fn sort_feed(items: &mut Vec<FeedItem>) {
-	// insertion or selection sort, it's prob mostly sorted already
+	// selection sort
 	// also not worried about complexity
 	// also i dont wanna
 	for i in 0..items.len()-1 {
@@ -173,28 +179,26 @@ async fn update_item(amitems: Arc<Mutex<Vec<FeedItem>>>, currdate: u64, ii: usiz
 	if items[ii].lookup.is_none() { println!("kdjafl"); return; }
 	let f: String = items[ii].lookup.as_ref().unwrap().into();
 	drop(items);
-	println!("checking site {}", f);
 	let currhash = get_hash_for_site(&f).await;
 	let mut items = amitems.lock().unwrap();
 	if currhash.is_some() && items[ii].hash.is_some() {
 		// visited page before and it is different now
 		if currhash.unwrap() != items[ii].hash.unwrap() {
+			println!("site {}", f);
+			println!("old hash: {}", items[ii].hash.unwrap());
+			println!("new hash: {}", currhash.unwrap());
 			items[ii].hash = Some(currhash.unwrap());
 			items[ii].date = Some(currdate);
 		}
 	} else if items[ii].date.is_none() && items[ii].hash.is_none() {
 		// visiting page first time, update hash and not last update tm
 		if let Some(h) = currhash {
+			println!("site {}", f);
+			println!("new hash: {}", currhash.unwrap());
 			items[ii].hash = Some(h);
 		}
 	}
 	drop(items);
-//	if let Some(h) = items[ii].hash {
-//		println!("old hash: {}", h);
-//	}
-//	if let Some(h) = currhash {
-//		println!("new hash: {}", h);
-//	}
 }
 
 pub fn update_feed() {
@@ -204,18 +208,13 @@ pub fn update_feed() {
 		.as_secs();
 	let l = items.len();
 	let amitems = Arc::new(Mutex::new(items));
-//	futures::executor::block_on(futures::future::join_all(futs));
-	let mut rt = tokio::runtime::Runtime::new().unwrap();
+	let rt = tokio::runtime::Runtime::new().unwrap();
 	let am = amitems.clone();
 	rt.block_on(async move {
 		let mut futs = Vec::new();
 		for i in 0..l {
 			let h = am.clone();
-			futs.push(
-//				tokio::spawn(async move {
-				update_item(h, currdate, i)
-//				})
-			);
+			futs.push(update_item(h, currdate, i));
 		}
 		futures::future::join_all(futs).await;
 	});
