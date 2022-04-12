@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-pub fn serve_file(mut stream: std::net::TcpStream, fal: &str, contype: &[u8]) {
+pub fn serve_file(stream: &mut std::net::TcpStream, fal: &str, contype: &[u8]) {
 	let mut v = Vec::<u8>::new();
 	let mut file = File::open(fal).unwrap();
 	file.read_to_end(&mut v).unwrap();
@@ -25,7 +25,7 @@ pub fn serve_file(mut stream: std::net::TcpStream, fal: &str, contype: &[u8]) {
 	if stream.write(b"\r\n\r\n").is_err() { return; }
 	if stream.write(&v).is_err() { return; }
 }
-pub fn serve_html(stream: std::net::TcpStream, fal: &str) {
+pub fn serve_html(stream: &mut std::net::TcpStream, fal: &str) {
 	serve_file(stream, fal, b"text/html");
 }
 

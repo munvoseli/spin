@@ -79,7 +79,7 @@ pub fn update_blog(slug: &str, slugb: &[u8]) -> bool {
 	true
 }
 
-pub fn serve_blog(stream: std::net::TcpStream, slugb: &[u8]) {
+pub fn serve_blog(stream: &mut std::net::TcpStream, slugb: &[u8]) {
 	// if the html does not exist or is outdated, make new html
 	// right now, just if dne
 	let slug = std::str::from_utf8(slugb).unwrap();
@@ -106,7 +106,7 @@ fn asciitohex(x: u8) -> u8 {
 	}
 }
 
-pub fn post(stream: std::net::TcpStream, slugb: &[u8], data: &[u8]) {
+pub fn post(stream: &mut std::net::TcpStream, slugb: &[u8], data: &[u8]) {
 	println!("post method boi");
 	let mut nd = Vec::<u8>::new();
 	let mut i = 7;
@@ -136,7 +136,7 @@ pub fn post(stream: std::net::TcpStream, slugb: &[u8], data: &[u8]) {
 	}
 }
 
-pub fn serve_edit(stream: std::net::TcpStream, slug: &[u8]) {
+pub fn serve_edit(stream: &mut std::net::TcpStream, slug: &[u8]) {
 	let fname = format!("blogsrc/{}.txt", std::str::from_utf8(slug).unwrap());
 	let mut outfile = File::create("edit.html").unwrap();
 	wirt::html_template(&mut outfile, "a.html");

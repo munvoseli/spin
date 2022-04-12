@@ -24,8 +24,8 @@ fn split_path(v: &[u8]) -> Vec<Vec<u8>> {
 	wb
 }
 
-struct Httpboi {
-	v: Vec<u8>,
+struct Httpboi<'a> {
+	v: &'a [u8],
 //	ihs: Vec<(usize, usize, usize, usize)>,
 	imd: (usize, usize),
 	ipt: (usize, usize),
@@ -68,7 +68,7 @@ fn get_conlen(v: &[u8], h: &[(usize, usize, usize, usize)]) -> usize {
 	0
 }
 
-fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
+fn handle_http(stream: &mut std::net::TcpStream) {
 	let mut data = [0 as u8; 50];
 	let mut v = Vec::<u8>::new();
 //	let mut headers = Vec::<(usize, usize, usize, usize)>::new();
@@ -76,19 +76,17 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 	let mut icrlf: usize = 0;
 	let mut dcrlf = false;
 	let now = std::time::Instant::now();
-	let mut i = 0;
 	loop {
 		match stream.read(&mut data) {
 		Ok(0) => {
-			println!("secsz {} {}", now.elapsed().as_secs(), i);
-			i += 1;
+//			println!("secsz {} {}", now.elapsed().as_secs(), i);
 			if now.elapsed().as_secs() > 10 {
 				println!("        timed out {}", now.elapsed().as_secs());
-				return None; // pizza with left beef
+				return; // pizza with left beef
 			}
 		},
 		Ok(n) => {
-			println!("secsn {}", now.elapsed().as_secs());
+//			println!("secsn {}", now.elapsed().as_secs());
 			v.extend_from_slice(&data[0..n]);
 			if !dcrlf {
 				while icrlf < v.len() - 3 {
@@ -101,21 +99,31 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 					icrlf += 1;
 				}
 			}
-			println!("{}", std::str::from_utf8(&v).unwrap());
 			if dcrlf {
 				if v.len() >= icrlf + 4 + conlen {
-					
-
+//					println!("{}", std::str::from_utf8(&v).unwrap());
+					let mut i = 0;
+					loop {
+						if v[i] == 32 { break; }
+						i += 1;
+					} // i on space before path
+					let mut j = i + 1;
+					loop {
+						if v[j] == 32 { break; }
+						j += 1;
+					} // j on space after path
+					handle_request(stream, Httpboi {
+						v: &v[0..icrlf + 4 + conlen],
+						imd: (0, i),
+						ipt: (i+1, j),
+						icont: icrlf + 4
+					});
 					dcrlf = false;
+					v.drain(0..icrlf + 4 + conlen);
 					icrlf = 0;
 					conlen = 0;
-					// cut v down
-//					println!("buff: {}", v.len());
-//					println!("head: {}", icrlf);
-//					println!("cont: {}", conlen);
-//					println!("head + cont + 4: {}", conlen + icrlf + 4);
-//					println!("booi");
-//					break;
+					stream.shutdown(std::net::Shutdown::Both).unwrap();
+					return;
 				}
 			}
 		},
@@ -125,29 +133,11 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 		}
 		}
 	}
-	let mut i = 0;
-	loop {
-		if v[i] == 32 { break; }
-		i += 1;
-	} // i on space before path
-	let mut j = i + 1;
-	loop {
-		if v[j] == 32 { break; }
-		j += 1;
-	} // j on space after path
-//	let method = &v[0..i];
-//	let path = &v[i+1..j];
-	Some(Httpboi {
-		v: v,
-//		ihs: headers,
-		imd: (0, i),
-		ipt: (i+1, j),
-//		conlen: conlen,
-		icont: icrlf + 4
-	})
 }
 
-fn handle_request(hb: Httboi) {
+fn handle_request(stream: &mut std::net::TcpStream, hb: Httpboi) {
+	println!("################################################");
+	println!("{}", std::str::from_utf8(&hb.v).unwrap());
 	let method = &hb.v[hb.imd.0..hb.imd.1];
 	let path = &hb.v[hb.ipt.0..hb.ipt.1];
 	let s = std::str::from_utf8(method).unwrap();
@@ -179,7 +169,7 @@ fn handle_request(hb: Httboi) {
 		} else {
 			wirt::serve_html(stream, "index.html");
 		}
-	} else if path[0] == [0x73, 0x74, 0x79, 0x6c, 0x65, 0x2e, 0x63, 0x73, 0x73] {
+	} else if path[0] == b"style.css" {
 		wirt::serve_file(stream, "style.css", b"text/css");
 	} else if path[0] == b"favicon.ico" {
 		wirt::serve_file(stream, "favicon.ico", b"image/x-icon");
@@ -190,14 +180,13 @@ fn handle_request(hb: Httboi) {
 
 fn handle_client(mut stream: std::net::TcpStream) {
 	println!("connection from {}", stream.peer_addr().unwrap());
-	let hb = handle_http(&mut stream);
-	if hb.is_none() {
-		println!("        couldn't handle connection");
-		return;
-	}
-	let hb = hb.unwrap();
+	handle_http(&mut stream);
+//	if hb.is_none() {
+//		println!("        couldn't handle connection");
+//		return;
+//	}
+//	let hb = hb.unwrap();
 //	stream.write(r).unwrap();
-//	stream.shutdown(std::net::Shutdown::Both).unwrap();
 //	stream.write(&v).unwrap();
 }
 
