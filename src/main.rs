@@ -76,20 +76,19 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 	let mut icrlf: usize = 0;
 	let mut dcrlf = false;
 	let now = std::time::Instant::now();
-//	let mut i = 0;
+	let mut i = 0;
 	loop {
 		match stream.read(&mut data) {
 		Ok(0) => {
-//			println!("secsz {} {}", now.elapsed().as_secs(), i);
-//			i += 1;
+			println!("secsz {} {}", now.elapsed().as_secs(), i);
+			i += 1;
 			if now.elapsed().as_secs() > 10 {
-				println!("timed out {}", now.elapsed().as_secs());
-				println!("peer ip: {}", stream.peer_addr().unwrap());
+				println!("        timed out {}", now.elapsed().as_secs());
 				return None; // pizza with left beef
 			}
 		},
 		Ok(n) => {
-//			println!("secsn {}", now.elapsed().as_secs());
+			println!("secsn {}", now.elapsed().as_secs());
 			v.extend_from_slice(&data[0..n]);
 			if !dcrlf {
 				while icrlf < v.len() - 3 {
@@ -102,14 +101,21 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 					icrlf += 1;
 				}
 			}
+			println!("{}", std::str::from_utf8(&v).unwrap());
 			if dcrlf {
 				if v.len() >= icrlf + 4 + conlen {
+					
+
+					dcrlf = false;
+					icrlf = 0;
+					conlen = 0;
+					// cut v down
 //					println!("buff: {}", v.len());
 //					println!("head: {}", icrlf);
 //					println!("cont: {}", conlen);
 //					println!("head + cont + 4: {}", conlen + icrlf + 4);
 //					println!("booi");
-					break;
+//					break;
 				}
 			}
 		},
@@ -141,14 +147,7 @@ fn handle_http(stream: &mut std::net::TcpStream) -> Option<Httpboi> {
 	})
 }
 
-fn handle_client(mut stream: std::net::TcpStream) {
-	println!("connection from {}", stream.peer_addr().unwrap());
-	let hb = handle_http(&mut stream);
-	if hb.is_none() {
-		println!("couldn't handle connection");
-		return;
-	}
-	let hb = hb.unwrap();
+fn handle_request(hb: Httboi) {
 	let method = &hb.v[hb.imd.0..hb.imd.1];
 	let path = &hb.v[hb.ipt.0..hb.ipt.1];
 	let s = std::str::from_utf8(method).unwrap();
@@ -187,6 +186,16 @@ fn handle_client(mut stream: std::net::TcpStream) {
 	} else {
 		wirt::serve_html(stream, "index.html");
 	}
+}
+
+fn handle_client(mut stream: std::net::TcpStream) {
+	println!("connection from {}", stream.peer_addr().unwrap());
+	let hb = handle_http(&mut stream);
+	if hb.is_none() {
+		println!("        couldn't handle connection");
+		return;
+	}
+	let hb = hb.unwrap();
 //	stream.write(r).unwrap();
 //	stream.shutdown(std::net::Shutdown::Both).unwrap();
 //	stream.write(&v).unwrap();

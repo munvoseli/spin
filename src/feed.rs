@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::fs::File;
 use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
+use crate::wirt;
 
 fn beginstrb(h: &[u8], n: &[u8]) -> bool {
 	if n.len() > h.len() { return false; }
@@ -131,7 +132,7 @@ fn save_feed(items: &Vec<FeedItem>) {
 
 fn save_feed_html(items: &Vec<FeedItem>) {
 	let mut file = File::create("feed.html").unwrap();
-	file.write(b"<!DOCTYPE html><html><body>").unwrap();
+	wirt::html_template(&mut file, "a.html");
 	let currdate = SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH).unwrap()
 		.as_secs();
@@ -154,7 +155,7 @@ fn save_feed_html(items: &Vec<FeedItem>) {
 		).unwrap();
 		file.write(b"\n").unwrap();
 	}
-	file.write(b"</body></html>\n").unwrap();
+	wirt::html_template(&mut file, "z.html");
 }
 
 fn sort_feed(items: &mut Vec<FeedItem>) {

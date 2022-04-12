@@ -18,3 +18,7 @@ height: 50em;
 img {
 display: block;
 }
+
+h1 a {
+font-size: 1rem;
+}
