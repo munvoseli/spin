@@ -1,7 +1,9 @@
 use std::fs::File;
 use std::io::{Read, Write};
+use tokio::net::TcpStream;
+use tokio::io::AsyncWriteExt;
 
-pub fn serve_file(stream: &mut std::net::TcpStream, fal: &str, contype: &[u8]) {
+pub async fn serve_file(stream: &mut TcpStream, fal: &str, contype: &[u8]) {
 	let mut v = Vec::<u8>::new();
 	let mut file = File::open(fal).unwrap();
 	file.read_to_end(&mut v).unwrap();
@@ -13,20 +15,20 @@ pub fn serve_file(stream: &mut std::net::TcpStream, fal: &str, contype: &[u8]) {
 		n /= 10;
 	}
 	let mut i = nv.len();
-	if stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: ").is_err()
-	|| stream.write(contype).is_err()
-	|| stream.write(b"\r\nContent-Length: ").is_err()
+	if stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: ").await.is_err()
+	|| stream.write(contype).await.is_err()
+	|| stream.write(b"\r\nContent-Length: ").await.is_err()
 	{ return; }
 	loop {
 		if i == 0 { break; }
 		i -= 1;
-		if stream.write(&nv[i..i+1]).is_err() { return; }
+		if stream.write(&nv[i..i+1]).await.is_err() { return; }
 	}
-	if stream.write(b"\r\n\r\n").is_err() { return; }
-	if stream.write(&v).is_err() { return; }
+	if stream.write(b"\r\n\r\n").await.is_err() { return; }
+	if stream.write(&v).await.is_err() { return; }
 }
-pub fn serve_html(stream: &mut std::net::TcpStream, fal: &str) {
-	serve_file(stream, fal, b"text/html");
+pub async fn serve_html(stream: &mut TcpStream, fal: &str) {
+	serve_file(stream, fal, b"text/html").await;
 }
 
 pub fn html_file(outfile: &mut File, f: &mut File) {

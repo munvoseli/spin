@@ -1,5 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
+use tokio::net::TcpStream;
+//use tokio::io::AsyncWriteExt;
 use crate::wirt;
 
 fn parse_write(outfile: &mut File, buf: &[u8]) {
@@ -50,7 +52,7 @@ fn parse_write(outfile: &mut File, buf: &[u8]) {
 }
 
 
-pub fn update_blog(slug: &str, slugb: &[u8]) -> bool {
+pub async fn update_blog(slug: &str, slugb: &[u8]) -> bool {
 	let fname = format!("blogsrc/{}.txt", slug);
 	let mdfile = File::open(fname);
 	if mdfile.is_err() {
@@ -79,20 +81,20 @@ pub fn update_blog(slug: &str, slugb: &[u8]) -> bool {
 	true
 }
 
-pub fn serve_blog(stream: &mut std::net::TcpStream, slugb: &[u8]) {
+pub async fn serve_blog(stream: &mut TcpStream, slugb: &[u8]) {
 	// if the html does not exist or is outdated, make new html
 	// right now, just if dne
 	let slug = std::str::from_utf8(slugb).unwrap();
 	let fname = format!("blogdst/{}.html", slug);
 	match File::open(&fname) {
 		Ok(_file) => {
-			wirt::serve_html(stream, &fname);
+			wirt::serve_html(stream, &fname).await;
 		},
 		Err(..) => {
-			if update_blog(&slug, slugb) {
-				wirt::serve_html(stream, &fname);
+			if update_blog(&slug, slugb).await {
+				wirt::serve_html(stream, &fname).await;
 			} else {
-				serve_edit(stream, slugb);
+				serve_edit(stream, slugb).await;
 			}
 		}
 	}
@@ -106,7 +108,7 @@ fn asciitohex(x: u8) -> u8 {
 	}
 }
 
-pub fn post(stream: &mut std::net::TcpStream, slugb: &[u8], data: &[u8]) {
+pub async fn post(stream: &mut TcpStream, slugb: &[u8], data: &[u8]) {
 	println!("post method boi");
 	let mut nd = Vec::<u8>::new();
 	let mut i = 7;
@@ -128,15 +130,15 @@ pub fn post(stream: &mut std::net::TcpStream, slugb: &[u8], data: &[u8]) {
 	let fname = format!("blogsrc/{}.txt", slug);
 	let mut outfile = File::create(&fname).unwrap();
 	outfile.write_all(&nd).unwrap();
-	if update_blog(&slug, slugb) {
+	if update_blog(&slug, slugb).await {
 		let fname = format!("blogdst/{}.html", slug);
-		wirt::serve_html(stream, &fname);
+		wirt::serve_html(stream, &fname).await;
 	} else {
-		wirt::serve_html(stream, "index.html");
+		wirt::serve_html(stream, "index.html").await;
 	}
 }
 
-pub fn serve_edit(stream: &mut std::net::TcpStream, slug: &[u8]) {
+pub async fn serve_edit(stream: &mut TcpStream, slug: &[u8]) {
 	let fname = format!("blogsrc/{}.txt", std::str::from_utf8(slug).unwrap());
 	let mut outfile = File::create("edit.html").unwrap();
 	wirt::html_template(&mut outfile, "a.html");
@@ -153,5 +155,5 @@ pub fn serve_edit(stream: &mut std::net::TcpStream, slug: &[u8]) {
 	}
 	outfile.write(b"</textarea><input type=\"submit\"></form>").unwrap();
 	wirt::html_template(&mut outfile, "z.html");
-	wirt::serve_html(stream, "edit.html");
+	wirt::serve_html(stream, "edit.html").await;
 }

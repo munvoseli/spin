@@ -1,5 +1,7 @@
-use std::io::Read;
+//use std::io::Read;
 //use std::fs::File;
+use tokio::net::TcpStream;
+use tokio::io::AsyncReadExt;
 
 mod feed;
 mod math;
@@ -68,7 +70,7 @@ fn get_conlen(v: &[u8], h: &[(usize, usize, usize, usize)]) -> usize {
 	0
 }
 
-fn handle_http(stream: &mut std::net::TcpStream) {
+async fn handle_http(stream: &mut TcpStream) {
 	let mut data = [0 as u8; 50];
 	let mut v = Vec::<u8>::new();
 //	let mut headers = Vec::<(usize, usize, usize, usize)>::new();
@@ -77,7 +79,7 @@ fn handle_http(stream: &mut std::net::TcpStream) {
 	let mut dcrlf = false;
 	let now = std::time::Instant::now();
 	loop {
-		match stream.read(&mut data) {
+		match stream.read(&mut data).await {
 		Ok(0) => {
 //			println!("secsz {} {}", now.elapsed().as_secs(), i);
 			if now.elapsed().as_secs() > 10 {
@@ -117,12 +119,19 @@ fn handle_http(stream: &mut std::net::TcpStream) {
 						imd: (0, i),
 						ipt: (i+1, j),
 						icont: icrlf + 4
-					});
-					dcrlf = false;
-					v.drain(0..icrlf + 4 + conlen);
-					icrlf = 0;
-					conlen = 0;
-					stream.shutdown(std::net::Shutdown::Both).unwrap();
+					}).await;
+					//dcrlf = false;
+					//v.drain(0..icrlf + 4 + conlen);
+					//icrlf = 0;
+					//conlen = 0;
+//					match stream.shutdown(Shutdown::Both) {
+//					Ok(..) => {
+//						println!("shut down stream");
+//					},
+//					Err(h) => {
+//						println!("couldn't shut down stream: {}", h);
+//					}
+//					}
 					return;
 				}
 			}
@@ -135,7 +144,7 @@ fn handle_http(stream: &mut std::net::TcpStream) {
 	}
 }
 
-fn handle_request(stream: &mut std::net::TcpStream, hb: Httpboi) {
+async fn handle_request<'a>(stream: &mut TcpStream, hb: Httpboi<'a>) {
 	println!("################################################");
 	println!("{}", std::str::from_utf8(&hb.v).unwrap());
 	let method = &hb.v[hb.imd.0..hb.imd.1];
@@ -146,55 +155,51 @@ fn handle_request(stream: &mut std::net::TcpStream, hb: Httpboi) {
 	let path = split_path(&path);
 	println!("Parsed path with {} terms", path.len());
 	if path.len() == 0 {
-		wirt::serve_html(stream, "index.html");
+		wirt::serve_html(stream, "index.html").await;
 	} else if path[0] == [0x66, 0x65, 0x65, 0x64] {
-		feed::update_feed();
-		wirt::serve_html(stream, "feed.html");
+		feed::update_feed().await;
+		wirt::serve_html(stream, "feed.html").await;
 	} else if path[0] == [0x6d, 0x61, 0x74, 0x68] {
 		math::update_math();
-		wirt::serve_html(stream, "math.html");
+		wirt::serve_html(stream, "math.html").await;
 	} else if path[0] == [0x62, 0x6c, 0x6f, 0x67] {
 		if path.len() >= 2 {
 			if method == [0x47, 0x45, 0x54] {
-				crate::blog::serve_blog(stream, &path[1]);
+				crate::blog::serve_blog(stream, &path[1]).await;
 			} else {
-				crate::blog::post(stream, &path[1], &hb.v[hb.icont..]);
+				crate::blog::post(stream, &path[1], &hb.v[hb.icont..]).await;
 			}
 		} else {
-			wirt::serve_html(stream, "index.html");
+			wirt::serve_html(stream, "index.html").await;
 		}
 	} else if path[0] == [0x65, 0x64, 0x69, 0x74] {
 		if path.len() >= 2 {
-			crate::blog::serve_edit(stream, &path[1]);
+			crate::blog::serve_edit(stream, &path[1]).await;
 		} else {
-			wirt::serve_html(stream, "index.html");
+			wirt::serve_html(stream, "index.html").await;
 		}
 	} else if path[0] == b"style.css" {
-		wirt::serve_file(stream, "style.css", b"text/css");
+		wirt::serve_file(stream, "style.css", b"text/css").await;
 	} else if path[0] == b"favicon.ico" {
-		wirt::serve_file(stream, "favicon.ico", b"image/x-icon");
+		wirt::serve_file(stream, "favicon.ico", b"image/x-icon").await;
 	} else {
-		wirt::serve_html(stream, "index.html");
+		wirt::serve_html(stream, "index.html").await;
 	}
 }
 
-fn handle_client(mut stream: std::net::TcpStream) {
+async fn handle_client(mut stream: TcpStream) {
 	println!("connection from {}", stream.peer_addr().unwrap());
-	handle_http(&mut stream);
-//	if hb.is_none() {
-//		println!("        couldn't handle connection");
-//		return;
-//	}
-//	let hb = hb.unwrap();
-//	stream.write(r).unwrap();
-//	stream.write(&v).unwrap();
+	handle_http(&mut stream).await;
 }
 
 fn main() {
-	let listener = std::net::TcpListener::bind("127.0.0.1:2627").unwrap();
-	for stream in listener.incoming() {
+	tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+	let listener = tokio::net::TcpListener::bind("127.0.0.1:2627").await.unwrap();
+	loop {
+		let (stream, _) = listener.accept().await.unwrap();
 		println!("got new stream");
-		handle_client(stream.unwrap());
+		handle_client(stream).await;
 		println!("finished stream");
 	}
+	});
 }

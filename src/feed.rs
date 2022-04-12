@@ -202,23 +202,23 @@ async fn update_item(amitems: Arc<Mutex<Vec<FeedItem>>>, currdate: u64, ii: usiz
 	drop(items);
 }
 
-pub fn update_feed() {
+pub async fn update_feed() {
 	let items = read_feed();
 	let currdate = SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH).unwrap()
 		.as_secs();
 	let l = items.len();
 	let amitems = Arc::new(Mutex::new(items));
-	let rt = tokio::runtime::Runtime::new().unwrap();
+//	let rt = tokio::runtime::Runtime::new().unwrap();
 	let am = amitems.clone();
-	rt.block_on(async move {
+//	rt.block_on(async move {
 		let mut futs = Vec::new();
 		for i in 0..l {
 			let h = am.clone();
 			futs.push(update_item(h, currdate, i));
 		}
 		futures::future::join_all(futs).await;
-	});
+//	});
 	let mut items = amitems.lock().unwrap();
 	println!("sorting feed");
 	sort_feed(&mut items);
