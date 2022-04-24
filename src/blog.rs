@@ -20,6 +20,8 @@ fn parse_write(outfile: &mut File, buf: &[u8]) {
 			outfile.write(&buf[3..j]).unwrap();
 		}
 		outfile.write(b"</a></p>").unwrap();
+	} else if buf.len() == 2 && buf[0..2] == [0x2d, 0x2d] {
+		outfile.write(b"<hr/>").unwrap();
 	} else if buf.len() > 2 && buf[0..3] == [0x69, 0x6d, 0x0a] {
 		outfile.write(b"<img src=\"").unwrap();
 		let mut j = 3;
@@ -109,7 +111,7 @@ fn asciitohex(x: u8) -> u8 {
 }
 
 pub async fn post(stream: &mut TcpStream, slugb: &[u8], data: &[u8]) {
-	println!("post method boi");
+//	println!("post method boi");
 	let mut nd = Vec::<u8>::new();
 	let mut i = 7;
 	loop {

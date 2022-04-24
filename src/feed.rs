@@ -12,7 +12,81 @@ fn beginstrb(h: &[u8], n: &[u8]) -> bool {
 	return true
 }
 
-async fn get_hash_for_site(url: &str) -> Option<u32> {
+fn calc_hash_atom(boi: &[u8]) -> u32 {
+	let mut i = 0;
+	let mut sum = 0;
+	loop {
+		if i >= boi.len() { break; }
+		if beginstrb(&boi[i..], b"<updated>") { i += 30; }
+		if boi[i] < 0x30 || boi[i] > 0x39 {
+			sum += boi[i] as u32;
+		}
+		i += 1;
+	}
+	sum
+}
+fn calc_hash_rss(boi: &[u8]) -> u32 {
+	let mut i = 0; let mut sum = 0; loop {
+		if i >= boi.len() { break; }
+		if beginstrb(&boi[i..], b"<lastBuildDate") { i += 30; }
+		if boi[i] < 0x30 || boi[i] > 0x39 {
+			sum += boi[i] as u32;
+		}
+		i += 1;
+	}
+	sum
+}
+fn calc_hash_gitea(boi: &[u8]) -> u32 {
+	let mut i = 0; let mut sum = 0; loop {
+		if i >= boi.len() { break; }
+		if beginstrb(&boi[i..], b"csrf") { i += 100; }
+		if beginstrb(&boi[i..], b"data-cfemail") { i += 100; }
+		if boi[i] < 0x30 || boi[i] > 0x39 {
+			sum += boi[i] as u32;
+		}
+		i += 1;
+	}
+	sum
+}
+fn calc_hash_numskip(boi: &[u8]) -> u32 {
+	let mut i = 0; let mut sum = 0; loop {
+		// don't count digit changes
+		// could be milliseconds used to generate the page
+		// or page view counter
+		// or date
+		if i >= boi.len() { break; }
+		if boi[i] < 0x30 || boi[i] > 0x39 {
+			sum += boi[i] as u32;
+		}
+		i += 1;
+	}
+	sum
+}
+fn calc_hash_bloggerprof(boi: &[u8]) -> u32 {
+	let mut i = 0; let mut sum = 0; loop {
+		if i >= boi.len() { break; }
+		if beginstrb(&boi[i..], b"\"og.qtm") {
+			println!("ldksjfal");
+			while boi[i] != 10 { i += 1; }
+		}
+		if boi[i] < 0x30 || boi[i] > 0x39 {
+			sum += boi[i] as u32;
+		}
+		i += 1;
+	}
+	sum
+}
+fn calc_hash_normal(boi: &[u8]) -> u32 {
+	let mut i = 0; let mut sum = 0; loop {
+		if i >= boi.len() { break; }
+		sum += boi[i] as u32;
+		i += 1;
+	}
+	sum
+}
+
+
+async fn get_hash_for_site(url: &str, hm: &str) -> Option<u32> {
 	let boi = reqwest::get(url).await;
 	match boi {
 	Err(_) => {
@@ -21,31 +95,20 @@ async fn get_hash_for_site(url: &str) -> Option<u32> {
 	_ => {}
 	}
 	let boi = boi.unwrap().bytes().await.unwrap();
-//	let mut boi = boi.into_iter();
-	let mut sum: u32 = 0;
-	let mut i = 0;
-	loop {
-		if i >= boi.len() { break; }
-//		if let Some(bh) = boi.next() {
-		// skip lastBuildDate rss
-		if beginstrb(&boi[i..], b"<lastBuildDate") { i += 30; }
-		if beginstrb(&boi[i..], b"csrf") { i += 100; }
-		if beginstrb(&boi[i..], b"data-cfemail") { i += 100; }
-		// don't count digit changes
-		// could be milliseconds used to generate the page
-		// or page view counter
-		// or date
-		if boi[i] < 0x30 || boi[i] > 0x39 {
-			sum += boi[i] as u32;
-		}
-		i += 1;
-//		} else { break; }
-	}
+	let sum = match hm {
+	"rss" => calc_hash_rss(&boi),
+	"atom" => calc_hash_atom(&boi),
+	"nonum" => calc_hash_numskip(&boi),
+	"gitea" => calc_hash_gitea(&boi),
+	"blpf" => calc_hash_bloggerprof(&boi),
+	_ => calc_hash_normal(&boi)
+	};
 	Some(sum)
 }
 
 struct FeedItem {
 	lookup: Option<String>,
+	mthd: Option<String>,
 	href: Option<String>,
 	text: Option<String>,
 	date: Option<u64>,
@@ -55,6 +118,7 @@ impl FeedItem {
 	pub fn new() -> Self {
 		Self {
 			lookup: None,
+			mthd: None,
 			href: None,
 			text: None,
 			date: None,
@@ -91,6 +155,7 @@ fn read_feed() -> Vec<FeedItem> {
 			std::str::from_utf8(&v[j..i]).unwrap().into();
 			match t {
 			0x6c6e => { item.lookup = Some(s); }, // ln
+			0x6d64 => { item.mthd = Some(s); }, // md
 			0x7266 => { item.href = Some(s); }, // rf
 			0x7478 => { item.text = Some(s); }, // tx
 			0x6474 => { // dt
@@ -114,6 +179,9 @@ fn save_feed(items: &Vec<FeedItem>) {
 		if let Some(h) = &item.lookup {
 			file.write(format!("ln {}\n", h).as_bytes()).unwrap();
 		}
+		if let Some(h) = &item.mthd {
+			file.write(format!("md {}\n", h).as_bytes()).unwrap();
+		}
 		if let Some(h) = &item.href {
 			file.write(format!("rf {}\n", h).as_bytes()).unwrap();
 		}
@@ -136,7 +204,11 @@ fn save_feed_html(items: &Vec<FeedItem>) {
 	let currdate = SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH).unwrap()
 		.as_secs();
-	for item in items {
+	let l = items.len();
+	let mut i = 0;
+	loop {
+		if i == l { break; }
+		let item = &items[i];
 		let url =
 			if let Some(h) = &item.href { h }
 			else { item.lookup.as_ref().unwrap() };
@@ -144,7 +216,9 @@ fn save_feed_html(items: &Vec<FeedItem>) {
 			if let Some(h) = &item.text { h }
 			else if let Some(h) = &item.href { h }
 			else { item.lookup.as_ref().unwrap() };
-		file.write(b"<br/>").unwrap();
+		if i > 0 {
+			file.write(b"<br/>").unwrap();
+		}
 		if let Some(h) = item.date {
 			file.write(
 				format!("{} ", currdate - h).as_bytes()
@@ -154,6 +228,7 @@ fn save_feed_html(items: &Vec<FeedItem>) {
 			format!("<a href=\"{}\">{}</a>", url, text).as_bytes()
 		).unwrap();
 		file.write(b"\n").unwrap();
+		i += 1;
 	}
 	wirt::html_template(&mut file, "z.html");
 }
@@ -176,11 +251,15 @@ fn sort_feed(items: &mut Vec<FeedItem>) {
 }
 
 async fn update_item(amitems: Arc<Mutex<Vec<FeedItem>>>, currdate: u64, ii: usize) {
-	let items = amitems.lock().unwrap();
-	if items[ii].lookup.is_none() { println!("kdjafl"); return; }
-	let f: String = items[ii].lookup.as_ref().unwrap().into();
-	drop(items);
-	let currhash = get_hash_for_site(&f).await;
+	let f: String;
+	let md: String;
+	{
+		let items = amitems.lock().unwrap();
+		if items[ii].lookup.is_none() { println!("kdjafl"); return; }
+		f = items[ii].lookup.as_ref().unwrap().into();
+		md = if let Some(h) = &items[ii].mthd { h.to_string() } else { "".into() };
+	}
+	let currhash = get_hash_for_site(&f, &md).await;
 	let mut items = amitems.lock().unwrap();
 	if currhash.is_some() && items[ii].hash.is_some() {
 		// visited page before and it is different now

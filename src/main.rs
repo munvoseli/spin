@@ -81,14 +81,15 @@ async fn handle_http(stream: &mut TcpStream) {
 	loop {
 		match stream.read(&mut data).await {
 		Ok(0) => {
-//			println!("secsz {} {}", now.elapsed().as_secs(), i);
-			if now.elapsed().as_secs() > 10 {
-				println!("        timed out {}", now.elapsed().as_secs());
-				return; // pizza with left beef
-			}
+			println!("secsz {}", now.elapsed().as_secs());
+			break;
+//			if now.elapsed().as_secs() > 10 {
+//				println!("        timed out {}", now.elapsed().as_secs());
+//				return; // pizza with left beef
+//			}
 		},
 		Ok(n) => {
-//			println!("secsn {}", now.elapsed().as_secs());
+			println!("secsn {}", now.elapsed().as_secs());
 			v.extend_from_slice(&data[0..n]);
 			if !dcrlf {
 				while icrlf < v.len() - 3 {
@@ -120,19 +121,10 @@ async fn handle_http(stream: &mut TcpStream) {
 						ipt: (i+1, j),
 						icont: icrlf + 4
 					}).await;
-					//dcrlf = false;
-					//v.drain(0..icrlf + 4 + conlen);
-					//icrlf = 0;
-					//conlen = 0;
-//					match stream.shutdown(Shutdown::Both) {
-//					Ok(..) => {
-//						println!("shut down stream");
-//					},
-//					Err(h) => {
-//						println!("couldn't shut down stream: {}", h);
-//					}
-//					}
-					return;
+					dcrlf = false;
+					v.drain(0..icrlf + 4 + conlen);
+					icrlf = 0;
+					conlen = 0;
 				}
 			}
 		},
@@ -145,8 +137,8 @@ async fn handle_http(stream: &mut TcpStream) {
 }
 
 async fn handle_request<'a>(stream: &mut TcpStream, hb: Httpboi<'a>) {
-	println!("################################################");
-	println!("{}", std::str::from_utf8(&hb.v).unwrap());
+	println!("################################################ start");
+//	println!("{}", std::str::from_utf8(&hb.v).unwrap());
 	let method = &hb.v[hb.imd.0..hb.imd.1];
 	let path = &hb.v[hb.ipt.0..hb.ipt.1];
 	let s = std::str::from_utf8(method).unwrap();
@@ -180,26 +172,32 @@ async fn handle_request<'a>(stream: &mut TcpStream, hb: Httpboi<'a>) {
 		}
 	} else if path[0] == b"style.css" {
 		wirt::serve_file(stream, "style.css", b"text/css").await;
+	} else if path[0] == b"gerald.css" {
+		wirt::serve_file(stream, "style.css", b"text/css").await;
 	} else if path[0] == b"favicon.ico" {
 		wirt::serve_file(stream, "favicon.ico", b"image/x-icon").await;
 	} else {
 		wirt::serve_html(stream, "index.html").await;
 	}
+	println!("################################################ end");
 }
 
 async fn handle_client(mut stream: TcpStream) {
+	println!("got new stream");
 	println!("connection from {}", stream.peer_addr().unwrap());
 	handle_http(&mut stream).await;
+	println!("finished stream");
 }
 
-fn main() {
-	tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+#[tokio::main]
+async fn main() {
+//	tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
 	let listener = tokio::net::TcpListener::bind("127.0.0.1:2627").await.unwrap();
 	loop {
 		let (stream, _) = listener.accept().await.unwrap();
-		println!("got new stream");
-		handle_client(stream).await;
-		println!("finished stream");
+		tokio::spawn(async move {
+			handle_client(stream).await
+		});
 	}
-	});
+//	});
 }
